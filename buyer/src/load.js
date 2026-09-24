@@ -40,7 +40,7 @@ function sendRequest(path, method, body) {
 
 async function main() {
   console.log(`\n🎯 TARGET: ${TICKETS} tickets`);
-  console.log(`⚔️  ATTACK: ${TOTAL_REQUESTS} concurrent requests\n`);
+  console.log(`️  ATTACK: ${TOTAL_REQUESTS} concurrent requests\n`);
 
   // 1. Reset the seller
   console.log('1. Resetting seller...');
@@ -98,7 +98,7 @@ async function main() {
   const invariant4Pass = serverSold === successfulBuys.length && serverTickets.length === successfulBuys.length;
   console.log(`   [${invariant4Pass ? '✅ PASS' : '❌ FAIL'}] Invariant 4: /status matches issued tickets (Server says ${serverSold}, we got ${successfulBuys.length})`);
 
-  console.log('\n🏁 TEST COMPLETE. If you see ❌ FAIL, the naive implementation is successfully broken!');
+  console.log('\n🏁 TEST COMPLETE.');
 }
 
 main().catch(console.error);

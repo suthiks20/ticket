@@ -1,6 +1,6 @@
 
 🎯 TARGET: 100 tickets
-⚔️  ATTACK: 500 concurrent requests
+️  ATTACK: 500 concurrent requests
 
 1. Resetting seller...
 ✅ Seller reset.
@@ -22,4 +22,4 @@
 3. Verifying /status truth...
    [✅ PASS] Invariant 4: /status matches issued tickets (Server says 100, we got 100)
 
-🏁 TEST COMPLETE. If you see ❌ FAIL, the naive implementation is successfully broken!
+🏁 TEST COMPLETE.

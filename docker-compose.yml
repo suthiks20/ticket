@@ -23,23 +23,58 @@ services:
       - "8474:8474"
       - "5433:5433"
 
-  seller:
+  seller-1:
     build: ./seller
     environment:
       DATABASE_URL: postgres://ticket:ticket@postgres:5432/tickets
       PORT: 3000
+      SELLER_MODE: ${SELLER_MODE:-naive}
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "3001:3000"
+    volumes:
+      - ./schema.sql:/app/schema.sql:ro
+
+  seller-2:
+    build: ./seller
+    environment:
+      DATABASE_URL: postgres://ticket:ticket@postgres:5432/tickets
+      PORT: 3000
+      SELLER_MODE: ${SELLER_MODE:-naive}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./schema.sql:/app/schema.sql:ro
+
+  seller-3:
+    build: ./seller
+    environment:
+      DATABASE_URL: postgres://ticket:ticket@postgres:5432/tickets
+      PORT: 3000
+      SELLER_MODE: ${SELLER_MODE:-naive}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3003:3000"
     volumes:
       - ./schema.sql:/app/schema.sql:ro
 
   nginx:
     image: nginx:alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "8080:80"
+    depends_on:
+      - seller-1
+      - seller-2
+      - seller-3
 
 volumes:
   pgdata:
