@@ -1,0 +1,25 @@
+
+🎯 TARGET: 100 tickets
+⚔️  ATTACK: 500 concurrent requests
+
+1. Resetting seller...
+✅ Seller reset.
+
+2. Firing concurrent requests...
+✅ All requests completed.
+
+📊 RESULTS:
+   Total Requests:      500
+   Successful (200 OK): 199
+   Sold Out (409):      301
+   Unique Tickets Issued: 199
+   Max Allowed:         100
+
+🔍 INVARIANT CHECKS:
+   [❌ FAIL] Invariant 1: Never oversell (Sold 199 <= 100)
+   [✅ PASS] Invariant 2: No duplicate ticket numbers
+
+3. Verifying /status truth...
+   [✅ PASS] Invariant 4: /status matches issued tickets (Server says 199, we got 199)
+
+🏁 TEST COMPLETE. If you see ❌ FAIL, the naive implementation is successfully broken!

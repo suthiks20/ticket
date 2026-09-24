@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ticket
+      POSTGRES_PASSWORD: ticket
+      POSTGRES_DB: tickets
+    command: ["postgres", "-c", "max_connections=200", "-c", "idle_in_transaction_session_timeout=5000"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticket -d tickets"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  toxiproxy:
+    image: shopify/toxiproxy
+    ports:
+      - "8474:8474"
+      - "5433:5433"
+
+  seller:
+    build: ./seller
+    environment:
+      DATABASE_URL: postgres://ticket:ticket@postgres:5432/tickets
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./schema.sql:/app/schema.sql:ro
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:

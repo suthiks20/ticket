@@ -1,0 +1,10 @@
+{
+  "name": "ticket-buyer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Load-testing client for the Ticket Stampede seller.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  }
+}

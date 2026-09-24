@@ -1,0 +1,6 @@
+# Ignore generated dependencies, secrets, database files, logs, and result streams.
+node_modules/
+.env
+pgdata/
+*.log
+results/*.ndjson
