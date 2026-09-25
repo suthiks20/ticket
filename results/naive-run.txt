@@ -1,25 +1,28 @@
 
-🎯 TARGET: 100 tickets
-⚔️  ATTACK: 500 concurrent requests
-
+🎯 TARGET: 100 tickets | ⚔️ ATTACK: 500 requests (dup-rate 0.1)
 1. Resetting seller...
 ✅ Seller reset.
 
-2. Firing concurrent requests...
-✅ All requests completed.
+2. Firing requests...
+✅ All requests settled.
 
 📊 RESULTS:
    Total Requests:      500
-   Successful (200 OK): 199
-   Sold Out (409):      301
-   Unique Tickets Issued: 199
-   Max Allowed:         100
+   Successful (200):    171
+   Sold Out (409):      329
+   In-Doubt (unresolved):0
+   Unique Tickets:      5
+   Median latency:      472.2 ms
+   P99 latency:         853.1 ms
 
 🔍 INVARIANT CHECKS:
-   [❌ FAIL] Invariant 1: Never oversell (Sold 199 <= 100)
-   [✅ PASS] Invariant 2: No duplicate ticket numbers
+   [❌ FAIL] Invariant 2: No duplicate tickets
+   [ℹ️ INFO] Duplicate request_ids sent: 49
 
-3. Verifying /status truth...
-   [✅ PASS] Invariant 4: /status matches issued tickets (Server says 199, we got 199)
+3. Cross-checking against /status (source of truth)...
+   Server says sold: 171 (max allowed: 100)
+   [❌ FAIL] Invariant 1: Never oversell
+   [✅ PASS] Invariant 4 (no lost confirmed sales): lost=0
+   In-doubt requests that never resolved: 0
 
-🏁 TEST COMPLETE. If you see ❌ FAIL, the naive implementation is successfully broken!
+🏁 TEST COMPLETE.

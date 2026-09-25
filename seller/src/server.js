@@ -147,21 +147,19 @@ fastify.get('/status', async (request, reply) => {
 // --- 4. STARTUP: Ensure Schema ---
 async function start() {
   try {
-    // Drop and recreate to ensure clean state with proper constraints
-    await pool.query('DROP TABLE IF EXISTS tickets CASCADE');
-    await pool.query('DROP TABLE IF EXISTS sales CASCADE');
-    
     await pool.query(`
-      CREATE TABLE sales (
+      CREATE TABLE IF NOT EXISTS sales (
         sale_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), 
         ticket_count INT NOT NULL, 
         is_active BOOLEAN DEFAULT false,
         sold_out BOOLEAN DEFAULT false
       );
       
-      CREATE UNIQUE INDEX idx_sales_active ON sales (is_active) WHERE is_active = true;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_active
+      ON sales (is_active)
+      WHERE is_active = true;
 
-      CREATE TABLE tickets (
+      CREATE TABLE IF NOT EXISTS tickets (
         sale_id UUID NOT NULL REFERENCES sales(sale_id) ON DELETE CASCADE, 
         ticket_number INT NOT NULL, 
         user_id TEXT, 
@@ -169,10 +167,19 @@ async function start() {
         PRIMARY KEY (sale_id, ticket_number)
       );
       
-      CREATE UNIQUE INDEX idx_tickets_request ON tickets (sale_id, request_id) WHERE request_id IS NOT NULL;
-      CREATE INDEX idx_tickets_available ON tickets (sale_id, ticket_number) WHERE user_id IS NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_request
+      ON tickets (sale_id, request_id)
+      WHERE request_id IS NOT NULL;
+
+      CREATE INDEX IF NOT EXISTS idx_tickets_available
+      ON tickets (sale_id, ticket_number)
+      WHERE user_id IS NULL;
     `);
-    console.log('✅ Fixed Database schema ensured with all constraints.');
+    const activeSale = await pool.query(
+      'SELECT sale_id FROM sales WHERE is_active = true LIMIT 1'
+    );
+    currentSaleId = activeSale.rows[0]?.sale_id || null;
+    console.log('Database schema ensured without changing existing sale data.');
     
     await fastify.listen({ port: process.env.PORT || 3000, host: '0.0.0.0' });
     console.log('🚀 Fixed Seller running on http://localhost:3000');

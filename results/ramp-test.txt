@@ -1,0 +1,89 @@
+🎯 TARGET: 1000 tickets | ⚔️ ATTACK: 2000 requests (dup-rate 0.08)
+1. Resetting seller...
+✅ Seller reset.
+
+2. Firing requests...
+✅ All requests settled.
+
+📊 RESULTS:
+   Total Requests:      2000
+   Successful (200):    1086
+   Sold Out (409):      914
+   In-Doubt (unresolved):0
+   Unique Tickets:      1000
+   Median latency:      125.8 ms
+   P99 latency:         346.9 ms
+
+🔍 INVARIANT CHECKS:
+   [❌ FAIL] Invariant 2: No duplicate tickets
+   [ℹ️ INFO] Duplicate request_ids sent: 160
+
+3. Cross-checking against /status (source of truth)...
+   Server says sold: 1000 (max allowed: 1000)
+   [✅ PASS] Invariant 1: Never oversell
+   [✅ PASS] Invariant 4 (no lost confirmed sales): lost=0
+   In-doubt requests that never resolved: 0
+
+🏁 TEST COMPLETE.
+
+C:\Users\suthikshan k\Desktop\ticket\buyer>node src/load.js --tickets 1000 --total 2000 --concurrency 500
+
+🎯 TARGET: 1000 tickets | ⚔️ ATTACK: 2000 requests (dup-rate 0.08)
+1. Resetting seller...
+✅ Seller reset.
+
+2. Firing requests...
+✅ All requests settled.
+
+📊 RESULTS:
+   Total Requests:      2000
+   Successful (200):    1071
+   Sold Out (409):      929
+   In-Doubt (unresolved):0
+   Unique Tickets:      1000
+   Median latency:      651.7 ms
+   P99 latency:         1572.8 ms
+
+🔍 INVARIANT CHECKS:
+   [❌ FAIL] Invariant 2: No duplicate tickets
+   [ℹ️ INFO] Duplicate request_ids sent: 145
+
+3. Cross-checking against /status (source of truth)...
+   Server says sold: 1000 (max allowed: 1000)
+   [✅ PASS] Invariant 1: Never oversell
+   [✅ PASS] Invariant 4 (no lost confirmed sales): lost=0
+   In-doubt requests that never resolved: 0
+
+🏁 TEST COMPLETE.
+
+C:\Users\suthikshan k\Desktop\ticket\buyer>node src/load.js --tickets 1000 --total 2000 --concurrency 1000
+
+🎯 TARGET: 1000 tickets | ⚔️ ATTACK: 2000 requests (dup-rate 0.08)
+1. Resetting seller...
+✅ Seller reset.
+
+2. Firing requests...
+✅ All requests settled.
+
+📊 RESULTS:
+   Total Requests:      2000
+   Successful (200):    1070
+   Sold Out (409):      930
+   In-Doubt (unresolved):0
+   Unique Tickets:      1000
+   Median latency:      1263.7 ms
+   P99 latency:         2995.6 ms
+
+🔍 INVARIANT CHECKS:
+   [❌ FAIL] Invariant 2: No duplicate tickets
+   [ℹ️ INFO] Duplicate request_ids sent: 138
+
+3. Cross-checking against /status (source of truth)...
+   Server says sold: 1000 (max allowed: 1000)
+   [✅ PASS] Invariant 1: Never oversell
+   [✅ PASS] Invariant 4 (no lost confirmed sales): lost=0
+   In-doubt requests that never resolved: 0
+
+🏁 TEST COMPLETE.
+
+C:\Users\suthikshan k\Desktop\ticket\buyer>
