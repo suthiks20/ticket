@@ -1,0 +1,37 @@
+C:\Users\suthikshan k\Desktop\ticket\buyer>node src/load.js --tickets 1000 --total 5000 --concurrency 100 --paced true --duration 20
+
+🎯 TARGET: 1000 tickets | ⚔️ ATTACK: 5000 requests (dup-rate 0.08)
+⏱️ PACED MODE: spreading over 20s
+
+1. Resetting seller...
+✅ Seller reset.
+
+2. Firing requests...
+✅ All requests settled.
+
+📊 RESULTS:
+   Total Requests:      5000
+   Successful (200):    1091
+   Sold Out (409):      3909
+   In-Doubt (unresolved):0
+   Unique Tickets:      1000
+   First-time claims:   1000
+   Idempotent replays:  91
+   Replay ticket mismatches: none
+   Median latency:      5.8 ms
+   P99 latency:         4301.4 ms
+
+🔍 INVARIANT CHECKS:
+   [PASS] Invariant 2: No duplicate tickets across distinct request_ids
+   [ℹ️ INFO] Duplicate request_ids sent: 375
+   [PASS] Idempotency replays returned their first-claim ticket.
+
+3. Cross-checking against /status (source of truth)...
+   Server says sold: 1000 (max allowed: 1000)
+   [✅ PASS] Invariant 1: Never oversell
+   [✅ PASS] Invariant 4 (no lost confirmed sales): lost=0
+   In-doubt requests that never resolved: 0
+
+🏁 TEST COMPLETE.
+
+C:\Users\suthikshan k\Desktop\ticket\buyer>
