@@ -11,6 +11,21 @@ const pool = new Pool({
 
 pool.on('error', (err) => console.error('Unexpected pool error:', err));
 
+function isConnectionLoss(err, client) {
+  const connectionErrorCodes = new Set([
+    'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE',
+    '57P01', '57P02', '57P03', '08000', '08001', '08003', '08004', '08006', '08007', '08P01',
+  ]);
+  const message = String(err?.message || '');
+  const streamDestroyed = Boolean(client?.connection?.stream?.destroyed);
+  return connectionErrorCodes.has(err?.code)
+    || /^08/.test(String(err?.code || ''))
+    || /connection terminated unexpectedly|connection (?:closed|lost)|socket hang up|connection reset by peer|server closed the connection/i.test(message)
+    || client?._queryable === false
+    || client?._ending === true
+    || streamDestroyed;
+}
+
 let currentSaleId = null;
 
 // --- 1. RESET: Pre-allocate ticket rows atomically ---
@@ -21,6 +36,8 @@ fastify.post('/reset', async (request, reply) => {
   }
 
   const client = await pool.connect();
+  client.on('error', (err) => console.error('Checked-out PostgreSQL client error:', err));
+  let releaseError;
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM tickets');
@@ -41,10 +58,18 @@ fastify.post('/reset', async (request, reply) => {
     await client.query('COMMIT');
     return { ok: true, sale_id: currentSaleId };
   } catch (e) {
-    await client.query('ROLLBACK');
+    if (isConnectionLoss(e, client)) {
+      releaseError = e;
+    } else {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        if (isConnectionLoss(rollbackError, client)) releaseError = rollbackError;
+      }
+    }
     throw e;
   } finally {
-    client.release();
+    client.release(releaseError);
   }
 });
 
@@ -62,6 +87,8 @@ fastify.post('/buy', async (request, reply) => {
   // Retry loop to handle lock contention gracefully
   for (let attempt = 0; attempt < 10; attempt++) {
     const client = await pool.connect();
+    client.on('error', (err) => console.error('Checked-out PostgreSQL client error:', err));
+    let releaseError;
     try {
       await client.query('BEGIN');
 
@@ -112,14 +139,28 @@ fastify.post('/buy', async (request, reply) => {
       await new Promise(resolve => setTimeout(resolve, 5)); 
 
     } catch (e) {
-      await client.query('ROLLBACK');
+      if (isConnectionLoss(e, client)) {
+        releaseError = e;
+        await new Promise(resolve => setTimeout(resolve, 5));
+        continue;
+      }
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        if (isConnectionLoss(rollbackError, client)) {
+          releaseError = rollbackError;
+          await new Promise(resolve => setTimeout(resolve, 5));
+          continue;
+        }
+        throw rollbackError;
+      }
       if (e.code === '23505') { // Unique constraint violation (race on request_id)
         await new Promise(resolve => setTimeout(resolve, 5));
         continue; // Retry, Step A will catch it next time
       }
       throw e;
     } finally {
-      client.release();
+      client.release(releaseError);
     }
   }
   

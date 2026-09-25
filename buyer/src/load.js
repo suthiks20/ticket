@@ -100,7 +100,7 @@ async function main() {
         const p = payloads[idx++];
         const deadlineMs = 15000;
         const r = await buyWithRetry(p, deadlineMs);
-        results.push(r);
+        results.push({ ...r, requestId: p.request_id });
         if (r.status === 200) ledger.set(p.request_id, r.body.ticket_number);
       }
     }
@@ -110,7 +110,7 @@ async function main() {
     for (let i = 0; i < payloads.length; i++) {
       const p = payloads[i];
       buyWithRetry(p, 20000).then((r) => {
-        results.push(r);
+        results.push({ ...r, requestId: p.request_id });
         if (r.status === 200) ledger.set(p.request_id, r.body.ticket_number);
       });
       await new Promise((res) => setTimeout(res, interval));
@@ -127,19 +127,55 @@ async function main() {
   const ticketNumbers = successful.map((r) => r.body.ticket_number);
   const uniqueTickets = new Set(ticketNumbers);
 
+  const firstTicketByRequest = new Map();
+  const ticketOwnersByFirstClaim = new Map();
+  const replayMismatches = [];
+  let idempotentReplays = 0;
+
+  for (const result of successful) {
+    const requestId = result.requestId;
+    const ticketNumber = result.body.ticket_number;
+    if (!firstTicketByRequest.has(requestId)) {
+      firstTicketByRequest.set(requestId, ticketNumber);
+      if (!ticketOwnersByFirstClaim.has(ticketNumber)) {
+        ticketOwnersByFirstClaim.set(ticketNumber, new Set());
+      }
+      ticketOwnersByFirstClaim.get(ticketNumber).add(requestId);
+    } else if (firstTicketByRequest.get(requestId) === ticketNumber) {
+      idempotentReplays++;
+    } else {
+      replayMismatches.push({ requestId, firstTicket: firstTicketByRequest.get(requestId), replayTicket: ticketNumber });
+    }
+  }
+
+  const duplicateTicketOwners = [...ticketOwnersByFirstClaim.entries()]
+    .filter(([, requestIds]) => requestIds.size > 1);
+
   console.log('📊 RESULTS:');
   console.log(`   Total Requests:      ${results.length}`);
   console.log(`   Successful (200):    ${successful.length}`);
   console.log(`   Sold Out (409):      ${soldOut.length}`);
   console.log(`   In-Doubt (unresolved):${inDoubt.length}`);
   console.log(`   Unique Tickets:      ${uniqueTickets.size}`);
+  console.log(`   First-time claims:   ${firstTicketByRequest.size}`);
+  console.log(`   Idempotent replays:  ${idempotentReplays}`);
+  const replayMismatchDetails = replayMismatches.length
+    ? replayMismatches.map(({ requestId, firstTicket, replayTicket }) =>
+      `${requestId} (first ${firstTicket}, replay ${replayTicket})`).join('; ')
+    : 'none';
+  console.log(`   Replay ticket mismatches: ${replayMismatchDetails}`);
   console.log(`   Median latency:      ${percentile(latencies, 50).toFixed(1)} ms`);
   console.log(`   P99 latency:         ${percentile(latencies, 99).toFixed(1)} ms\n`);
 
   console.log('🔍 INVARIANT CHECKS:');
-  console.log(`   [${uniqueTickets.size === successful.length ? '✅ PASS' : '❌ FAIL'}] Invariant 2: No duplicate tickets`);
+  console.log("   [" + (duplicateTicketOwners.length === 0 ? "PASS" : "FAIL") + "] Invariant 2: No duplicate tickets across distinct request_ids");
   console.log(`   [ℹ️ INFO] Duplicate request_ids sent: ${payloads.length - new Set(payloads.map(p => p.request_id)).size}`);
 
+  if (replayMismatches.length > 0) {
+    console.log("   [FAIL] Idempotency replay returned a different ticket: " + replayMismatchDetails);
+  } else {
+    console.log("   [PASS] Idempotency replays returned their first-claim ticket.");
+  }
   console.log('\n3. Cross-checking against /status (source of truth)...');
   const statusRes = await sendRequest('/status', 'GET');
   if (statusRes.status !== 200 || !statusRes.body || !statusRes.body.tickets) {
