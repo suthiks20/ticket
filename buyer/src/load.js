@@ -68,7 +68,10 @@ function closeAuditLog() {
   if (!auditStream || auditStream.destroyed) return Promise.resolve();
   const stream = auditStream;
   auditStream = null;
-  return new Promise((resolve) => stream.end(resolve));
+  return new Promise((resolve) => {
+    stream.once('finish', resolve);
+    stream.end();
+  });
 }
 
 function sendRequest(path, method, body) {
@@ -176,6 +179,7 @@ async function main() {
     while (results.length < payloads.length) await new Promise((r) => setTimeout(r, 500));
   }
   console.log('✅ All requests settled.\n');
+  await closeAuditLog();
 
   const latencies = results.filter((r) => r.ms != null).map((r) => r.ms).sort((a, b) => a - b);
   const successful = results.filter((r) => r.status === 200);
