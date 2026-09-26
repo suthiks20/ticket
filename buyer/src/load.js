@@ -1,5 +1,7 @@
 // buyer/src/load.js — adds P50/P99, duplicate-ID probing, pacing, in-doubt tracking, safe /status check
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
 const args = Object.fromEntries(
   process.argv.slice(2).reduce((acc, v, i, arr) => {
@@ -15,6 +17,59 @@ const CONCURRENCY = Number(args.concurrency || 500);
 const DUP_RATE = Number(args['dup-rate'] || 0.08);
 const PACED = args.paced === 'true';
 const DURATION_MS = Number(args.duration || 60) * 1000;
+const retryCountsByRequestId = new Map();
+let auditStream;
+
+async function openAuditLog() {
+  try {
+    const auditPath = path.resolve(__dirname, '../../results/audit.ndjson');
+    fs.mkdirSync(path.dirname(auditPath), { recursive: true });
+    const freshLog = process.argv.includes('--fresh-log');
+    auditStream = fs.createWriteStream(auditPath, { flags: freshLog ? 'w' : 'a' });
+    auditStream.on('error', (err) => {
+      console.error('Audit log write failed; continuing without audit logging:', err);
+      auditStream = null;
+    });
+    await new Promise((resolve, reject) => {
+      auditStream.once('open', resolve);
+      auditStream.once('error', reject);
+    });
+  } catch (err) {
+    console.error('Audit log could not be opened; continuing without audit logging:', err);
+    if (auditStream) auditStream.destroy();
+    auditStream = null;
+  }
+}
+
+function recordAttempt(payload, response) {
+  if (!auditStream) return;
+  const requestId = payload.request_id;
+  const retryCount = retryCountsByRequestId.get(requestId) || 0;
+  retryCountsByRequestId.set(requestId, retryCount + 1);
+  const outcome = response.status === 200
+    ? 'confirmed'
+    : response.status === 409
+      ? 'sold_out'
+      : response.status === 0 || response.status >= 500
+        ? 'in_doubt'
+        : 'error';
+  auditStream.write(`${JSON.stringify({
+    request_id: requestId,
+    http_status: response.status,
+    latency_ms: response.ms,
+    retry_count: retryCount,
+    outcome,
+    timestamp: new Date().toISOString(),
+    ticket_number: response.status === 200 && response.body ? response.body.ticket_number : null,
+  })}\n`);
+}
+
+function closeAuditLog() {
+  if (!auditStream || auditStream.destroyed) return Promise.resolve();
+  const stream = auditStream;
+  auditStream = null;
+  return new Promise((resolve) => stream.end(resolve));
+}
 
 function sendRequest(path, method, body) {
   return new Promise((resolve) => {
@@ -68,6 +123,7 @@ async function buyWithRetry(payload, deadlineMs) {
   const start = Date.now();
   while (Date.now() - start < deadlineMs) {
     const r = await sendRequest('/buy', 'POST', payload);
+    recordAttempt(payload, r);
     if (r.status === 200 || r.status === 409 || r.status === 422 || r.status === 400) {
       return { ...r, inDoubt: false };
     }
@@ -77,6 +133,7 @@ async function buyWithRetry(payload, deadlineMs) {
 }
 
 async function main() {
+  await openAuditLog();
   console.log(`\n🎯 TARGET: ${TICKETS} tickets | ⚔️ ATTACK: ${TOTAL} requests (dup-rate ${DUP_RATE})`);
   if (PACED) console.log(`⏱️ PACED MODE: spreading over ${DURATION_MS / 1000}s\n`);
 
@@ -84,6 +141,7 @@ async function main() {
   const resetRes = await sendRequest('/reset', 'POST', { ticket_count: TICKETS });
   if (resetRes.status !== 200) {
     console.error('❌ Reset failed:', resetRes);
+    await closeAuditLog();
     process.exit(1);
   }
   console.log('✅ Seller reset.\n');
@@ -208,4 +266,6 @@ function finishWithStatus(statusBody, ledger, ticketCount, inDoubt) {
   console.log('\n🏁 TEST COMPLETE.');
 }
 
-main().catch((e) => console.error('Fatal error:', e));
+main()
+  .catch((e) => console.error('Fatal error:', e))
+  .finally(() => closeAuditLog());
