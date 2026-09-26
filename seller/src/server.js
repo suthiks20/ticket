@@ -90,46 +90,50 @@ fastify.post('/buy', async (request, reply) => {
     client.on('error', (err) => console.error('Checked-out PostgreSQL client error:', err));
     let releaseError;
     try {
-      await client.query('BEGIN');
+      // Check for an idempotent replay and claim a free ticket in one atomic statement.
+      const result = await client.query(`
+        WITH existing AS (
+          SELECT ticket_number, user_id
+          FROM tickets
+          WHERE sale_id = $1 AND request_id = $2
+        ),
+        free AS MATERIALIZED (
+          SELECT ticket_number
+          FROM tickets
+          WHERE sale_id = $1
+            AND user_id IS NULL
+            AND NOT EXISTS (SELECT 1 FROM existing)
+          ORDER BY ticket_number
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        ),
+        claimed AS (
+          UPDATE tickets t
+          SET user_id = $3, request_id = $2
+          FROM free f
+          WHERE t.sale_id = $1 AND t.ticket_number = f.ticket_number
+          RETURNING t.ticket_number, $3::text AS user_id
+        )
+        SELECT ticket_number, user_id, 'claimed'::text AS source
+        FROM claimed
+        UNION ALL
+        SELECT ticket_number, user_id, 'replay'::text AS source
+        FROM existing
+      `, [currentSaleId, request_id, user_id]);
 
-      // Step A: Idempotency Check (Invariant 3)
-      const replay = await client.query(
-        'SELECT ticket_number, user_id FROM tickets WHERE sale_id = $1 AND request_id = $2',
-        [currentSaleId, request_id]
-      );
-      
-      if (replay.rows.length > 0) {
-        await client.query('COMMIT');
-        if (replay.rows[0].user_id !== user_id) {
+      if (result.rows.length > 0) {
+        const ticket = result.rows[0];
+        if (ticket.source === 'replay' && ticket.user_id !== user_id) {
           return reply.code(422).send({ error: 'REQUEST_ID_REUSE_BY_DIFFERENT_USER' });
         }
-        return { ticket_number: replay.rows[0].ticket_number, sale_id: currentSaleId };
+        return { ticket_number: ticket.ticket_number, sale_id: currentSaleId };
       }
 
-      // Step B: Claim a ticket using FOR UPDATE SKIP LOCKED
-      const claim = await client.query(`
-        UPDATE tickets 
-        SET user_id = $1, request_id = $2 
-        WHERE ticket_number = (
-          SELECT ticket_number FROM tickets 
-          WHERE sale_id = $3 AND user_id IS NULL 
-          ORDER BY ticket_number 
-          LIMIT 1 FOR UPDATE SKIP LOCKED
-        )
-        RETURNING ticket_number
-      `, [user_id, request_id, currentSaleId]);
-
-      if (claim.rows.length > 0) {
-        await client.query('COMMIT');
-        return { ticket_number: claim.rows[0].ticket_number, sale_id: currentSaleId };
-      }
-
-      // Step C: If 0 rows claimed, check if truly sold out or just locked by others
+      // If no row was returned, check whether inventory is sold out or temporarily locked.
       const available = await client.query(
         'SELECT EXISTS(SELECT 1 FROM tickets WHERE sale_id = $1 AND user_id IS NULL)',
         [currentSaleId]
       );
-      await client.query('COMMIT');
 
       if (!available.rows[0].exists) {
         return reply.code(409).send({ error: 'SOLD_OUT' });
